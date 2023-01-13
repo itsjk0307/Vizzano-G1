@@ -3,10 +3,18 @@ import { Wrapper } from "./style";
 import LogoIcon from "../../assets/icons/LogoIcon.jpg";
 import ShapeSvg from "../../components/Generic/ShapeSVG";
 import { LoadingOutlined } from "@ant-design/icons";
-import { message, notification } from "antd";
+import { notification } from "antd";
+import axios from "axios";
+import { useSignIn } from "react-auth-kit";
+import { useNavigate } from "react-router-dom";
+
 const Login = () => {
+  const signIn = useSignIn();
   const [userInfo, setUserInfo] = useState({ fullName: "", password: "" });
   const [loading, setLoading] = useState(false);
+  const [playWarningAnimation, setPlayWarningAnimation] = useState(false);
+
+  const navigate = useNavigate();
 
   const customNotification = ({ type, message, description, placement }) => {
     notification[type]({
@@ -15,27 +23,68 @@ const Login = () => {
       placement,
     });
   };
+
+  const handleWarningAnitmation = () => {
+    setPlayWarningAnimation(true);
+    setTimeout(() => {
+      setPlayWarningAnimation(false);
+    }, 1000);
+  };
+
   const handleChange = (e) => {
     setUserInfo({ ...userInfo, [e.target.name]: e.target.value });
   };
-
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" || e.type === "click") {
+      onAuth();
+    }
+  };
   const onAuth = () => {
-    if (!userInfo.fullName || !userInfo.password)
+    handleWarningAnitmation();
+    if (!userInfo.fullName || !userInfo.password) {
       customNotification({
         type: "error",
         message: "Please fill up all the fields",
         placement: "topRight",
       });
-
+      return;
+    }
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      customNotification({
-        type: "success",
-        message: "You have successfully logged in",
-        placement: "topRight",
+    axios({
+      method: "POST",
+      url: `${process.env.REACT_APP_BASE_URL}/user/login`,
+      data: userInfo,
+    })
+      .then((res) => {
+        console.log(res);
+        const { token, user } = res.data.data;
+
+        signIn({
+          token,
+          expiresIn: 3600,
+          tokenType: "Bearer",
+          authState: { fullName: user.fullName, isAuthed: true },
+        });
+        setLoading(false);
+        navigate("/");
+      })
+      .catch((error) => {
+        handleWarningAnitmation();
+        if (error.request.status >= 500) {
+          return customNotification({
+            type: "error",
+            message: "ERROR",
+            description: "Server is not responding",
+          });
+        }
+        customNotification({
+          type: "error",
+          message: "ERROR",
+          description: error.response.data.extraMessage,
+          placement: "topRight",
+        });
+        setLoading(false);
       });
-    }, 3000);
   };
 
   return (
@@ -73,8 +122,12 @@ const Login = () => {
               onChange={handleChange}
               name="password"
               placeholder={"Password"}
+              onKeyDown={handleKeyDown}
             />
-            <Wrapper.Button onClick={onAuth}>
+            <Wrapper.Button
+              warningAnimation={playWarningAnimation}
+              onClick={handleKeyDown}
+            >
               {loading ? <LoadingOutlined /> : "Login"}
             </Wrapper.Button>
           </Wrapper.RightContainer>
